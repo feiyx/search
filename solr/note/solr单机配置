@@ -1,0 +1,339 @@
+github没有图片，请看笔记：地址  http://note.youdao.com/noteshare?id=57ccce73449fe4047e6acb95472a43a3&sub=405499E2A83E45B7AD5EB4ABB77FCC4E
+
+2. 下载solr-4.2.0.tgz 包
+  wget  http://archive.apache.org/dist/lucene/solr/4.2.0/solr-4.2.0.tgz
+  3. 解压solr包,成solr-4.2.0 文件夹名称mv 修改成solr
+  4. 进入的solr下载包中，如图1
+   
+
+                             图1
+  2. 进入dist文件夹，将solr-4.2.0.war包cp 到tomcat 下面的webapps，如图2；并将solr-4.2.0文件夹名修改solr。tomcat启动web服务的时候，就会自动解压该war包，安装jre是不能自动解压solr的；如图3.
+   
+
+                                图2
+   
+
+                                图3
+  2. solr-4.2.0.tgz包解压后，该文件夹下面涵盖了所用到的solr的home文件夹包以及所用到的jar等。solr的home包（想起home 就想起了JAVA_HOME的概念）差不多，后面配置也用到了。第一次配置，从图1中ex吃的ample 文件夹中将solr的文件夹，拷贝到一个目录下，如图：拷贝到/opt/下面；如图4
+  
+   
+
+
+                                图4(作者拷贝到了/opt/下面)
+  2. 配置solr 的tomcat web启动服务环境
+   a>tomcat有关配置：tomcat/conf/server.xml+tomcat/conf/ catalina.sh   （如图5,如图6）
+
+             图5  （修改端口，添加请求参数编码，作者修改将端口成了8888）
+
+图6  （请复制文本：CATALINA_OPTS=”$CATALINA_OPTS -Dsolr.solr.home=/opt/solr/”）
+ 
+   b>图3将solr-4.2-0.war包拷贝到tomcat webapps下面的solr有关配置：webapps/solr/WEB-INF/web.xml（如图6,图7）
+
+                         图6 （就是要修改的solr的web.xml）
+
+  图7（在web.xml中找到env-entry 取消注释，修改。env-entry-value 就是图4的操作地址啊。亲，好好对照一下）
+ 
+  2. 检验solr在tomcat 环境中solr是否安装成功。在浏览器地址中，输入，linux环境中的主机的ip地址或者域名:刚才修改tomcat的端口号/solr(图8)ll
+遇到的问题
+1.启动的时候404  将 solr-4.3.1\example\lib\ext下的所有jar文件复制到tomcat\lib下重启tomcat
+2．启动的时候HTTP Status 503 - Server is shutting down or failed to initialize
+将solr/example/resources/log4j.properties  复制到  /tomcat/webapps/solr/WEB-INF/classes/
+ 
+ 
+
+                 图8 （如果出现这个界面就说明solr已经依赖tomcat配置好了）
+ 
+ 
+ 
+ 
+  2. 亲，马上开始配置搜索环境；亲看下一页，重头开始！
+ 
+ 
+ 
+ 
+ 
+ 
+
+9.进入上面图4中将solr的home包拷贝到/opt/，按照如下操作；如图9，图10
+
+                       图9（亲，请先看上面的图4，按照如图指示进入conf）
+
+ 
+            图10（conf 中就是我们要实现数据库索引维护配置的3个核心文件）
+  2. 配置schema.xml
+vi schema.xml 后，删掉该xml文件的所有内容，用下面的内容替换；
+<?xml version="1.0" encoding="UTF-8" ?>
+<schema name="example" version="1.5">
+ <fields>      
+   <field name="publicity_id" type="uuid" indexed="true" stored="true" required="true" multiValued="false" />
+   <field name="data_type" type="int" indexed="true" stored="true" required="false" multiValued="false" />
+   <field name="id"  type="long" indexed="true" stored="true" omitNorms="true"/>
+   <field name="areas" type="string" indexed="true" stored="true" omitNorms="true" multiValued="true" />
+   <field name="sources" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="name" type="text_general" indexed="true" stored="true"/>
+  
+   <field name="text" type="text_general" stored="false" indexed="true"  multiValued="false"/>
+   <field name="_version_" type="long" indexed="true" stored="true"/>
+ </fields>
+  <uniqueKey>publicity_id</uniqueKey>
+  <types>
+    <fieldType name="uuid" class="solr.UUIDField" sortMissingLast="true" indexed="true"/>
+         <fieldType name="int" class="solr.TrieIntField" precisionStep="0" positionIncrementGap="0"/>
+    <fieldType name="string" class="solr.StrField" sortMissingLast="true" />
+    <fieldType name="long" class="solr.TrieLongField" precisionStep="0" positionIncrementGap="0"/>
+    <fieldType name="text_general" class="solr.TextField" positionIncrementGap="100">
+        <analyzer type="index">
+                           <tokenizer class="solr.StandardTokenizerFactory"/>
+                           <filter class="solr.StopFilterFactory" ignoreCase="true" words="stopwords.txt" enablePositionIncrements="true" />
+                           <filter class="solr.LowerCaseFilterFactory"/>
+         </analyzer>
+         <analyzer type="query">
+                           <tokenizer class="solr.StandardTokenizerFactory"/>
+                           <filter class="solr.StopFilterFactory" ignoreCase="true" words="stopwords.txt" enablePositionIncrements="true" />
+                           <filter class="solr.SynonymFilterFactory" synonyms="synonyms.txt" ignoreCase="true" expand="true"/>
+                           <filter class="solr.LowerCaseFilterFactory"/>
+         </analyzer>
+    </fieldType>
+  </types>
+</schema>
+  2. 配置solrconf.xml
+      a>亲，vi solrconf.xml    找到<requestHandler  name=”xxx” 附近，添加如下内容：
+                <requestHandler name="/dataimport" class="org.apache.solr.handler.dataimport.DataImportHandler">
+    <lst name="defaults">
+      <str name="config">/opt/solr/collection1/conf/data-config.xml</str>     
+    </lst>
+  </requestHandler>
+ 
+
+注意：name=”conf” 固定写法，这里只替换data-config.xml的地址。data-config.xml是作者自己创建的。
+b>注释掉solrconf.xml中的一部分（提示vi solrconf.xml    使用/elevate  回车定位）
+
+c>找到<requestHandler name=”/update”  修改下面的<str name=”update.chain”> 的值为uuid</str>  修改成uuid  并取消块注释
+
+d>找到如图下面的<updateRequestProcessorChain name="dedupe">,然后替换如下内容
+
+
+修改红色表记起来的内容
+请复制：
+         <updateRequestProcessorChain name="uuid">
+                   <processor class="solr.UUIDUpdateProcessorFactory">
+                             <str name="fieldName">publicity_id</str>
+                   </processor>
+                   <processor class="solr.LogUpdateProcessorFactory" />
+                   <processor class="solr.DistributedUpdateProcessorFactory" />
+                   <processor class="solr.RunUpdateProcessorFactory" />
+         </updateRequestProcessorChain>
+  2. 配置data-config.xml
+亲，在图10下面创建data-config.xml, 然后复制如下内容：
+<?xml version="1.0" encoding="UTF-8" ?>
+<dataConfig>
+         <dataSource type="JdbcDataSource"
+                     driver="com.mysql.jdbc.Driver"
+                url="jdbc:mysql://101.200.203.63:3306/creditchina"
+                                    user="root" password="robin"/>
+         <!--document was created by table 'penalty'-->
+    <document>
+                  <entity name="penalty_entity"
+                          query="select uuid() as uuid,id,name,areacode,departmentname,data_type from penalty">
+                      <field column="uuid" name="publicity_id"/>
+                           <field column="id" name="id"/>    
+                           <field column="name" name="name"/>
+                           <field column="areacode" name="areas"/>
+                           <field column="departmentname" name="sources"/>
+                           <field column="data_type" name="data_type"/>
+                  </entity>
+                  <entity name="permission_entity"
+                          query="select uuid() as uuid,id,projectname,areacode,department,data_type from permission">
+                           <field column="uuid" name="publicity_id"/>
+                           <field column="id" name="id"/>    
+                           <field column="projectname" name="name"/>
+                           <field column="areacode" name="areas"/>
+                           <field column="department" name="sources"/>
+                           <field column="data_type" name="data_type"/>
+                  </entity>
+         </document>
+</dataConfig>
+慢一点，还需要亲修改
+
+修改成需要连接的数据库地址及端口号等参数；
+  2. 在tomcat/webapps/solr/WEB-INF/lib 中导入solr data-import命令要使用的jar。
+  jar包清单如下：
+   
+
+ 
+下载wget http://cdn.mysql.com//Downloads/Connector-J/mysql-connector-java-5.1.37.tar.gz到一个目录然后解压将mysql-connetor-java-5.1.37-bin.jar包cp 到该lib底下；
+从图2中（也就是刚开始下载的solr-4.2.0.tar包解压后的）
+
+cp  图中的2个jar包。solrj-lib 是用于java 的开发jar 包。如果在启动的报错dependence 错误，也就是依赖jar 错误。你也可以将这里的dist 下面的所有jar cp到刚才的lib下面；
+一个复制jar包的命令
+ cp -R solr-d* solr-a*  solr-l* solr-t* solr-uima-4.2.0.jar  solr-velocity-4.2.0.jar  /usr/local/tomcat/webapps/solr/WEB-INF/lib/  
+好了，搜索环境配置好了。我们开始建索引吧！
+ 
+ 
+ 
+14.在浏览器上面输入你的机器ip加上tomcat的端口号然后/solr, 下拉框选择collection1
+ 
+
+ 点击Dataimport 
+
+选择full-import 刚开始初始化先来一次full
+选择commit ，选择entity ，先选一个。然后点击execute ，不要动啊。可以选择Auto-Refresh Status 这个时候右边的就会显示索引的建立增长状态。如果出现如图的绿色说明证明该实体的索引已经建立好了。同样道理，选择另外一个实体。
+ 
+注意：在启动页面后，如果dataImportHandler没有数据，可以重启tomcat即可显示。
+ 
+
+ik配置 
+solr添加中文IK分词器,以及配置自定义词库
+Solr是一个基于Lucene的Java搜索引擎服务器。Solr 提供了层面搜索、命中醒目显示并且支持多种输出格式（包括 XML/XSLT 和 JSON 格式）。它易于安装和配置，而且附带了一个基于HTTP 的管理界面。Solr已经在众多大型的网站中使用，较为成熟和稳定。Solr 包装并扩展了Lucene，所以Solr的基本上沿用了Lucene的相关术语。更重要的是，Solr 创建的索引与 Lucene搜索引擎库完全兼容。通过对Solr 进行适当的配置，某些情况下可能需要进行编码，Solr 可以阅读和使用构建到其他 Lucene 应用程序中的索引。此外，很多 Lucene 工具（如Nutch、Luke）也可以使用Solr 创建的索引。
+ 
+solr默认是不支持中文分词的，这样就需要我们手工配置中文分词器，在这里我们选用IK Analyzer中文分词器。
+IK Analyzer下载地址：https://code.google.com/p/ik-analyzer/downloads/list
+如图：
+
+
+ 
+ 
+默认大家已经下载并解压了solr，在这里我们使用solr 4.10.4版本
+试验环境centos 6.5 ，JDK1.7
+整合步骤
+1：解压下载的IK Analyzer_2012_FF_hf1.zip压缩包，把IKAnalyzer2012FF_u1.jar拷贝到solr-4.10.4/example/solr-webapp/webapp/WEB-INF/lib目录下
+2：在solr-4.10.4/example/solr-webapp/webapp/WEB-INF目录下创建目录classes，然后把IKAnalyzer.cfg.xml和stopword.dic拷贝到新创建的classes目录下即可。
+3：修改solr core的schema文件，默认是solr-4.10.4/example/solr/collection1/conf/schema.xml,添加如下配置
+     <fieldType name="text_ik" class="solr.TextField">
+        <!--索引时候的分词器-->
+<analyzer type="index" isMaxWordLength="false" class="org.wltea.analyzer.lucene.IKAnalyzer"/>
+<!--查询时候的分词器-->
+<analyzer type="query" isMaxWordLength="true" class="org.wltea.analyzer.lucene.IKAnalyzer"/>
+</fieldType>
+4：启动solr，bin/solr start
+5：进入solr web界面http://localhost:8983/solr,看到下图操作结果即为配置成功
+
+
+ 
+ 
+到现在为止，solr就和IK Analyzer中文分词器整合成功了。
+ 
+但是，如果我想自定义一些词库，让IK分词器可以识别，那么就需要自定义扩展词库了。
+操作步骤：
+1：修改solr-4.10.4/example/solr-webapp/webapp/WEB-INF/classes目录下的IKAnalyzer.cfg.xml配置文件，添加如下配置
+     <entry key="ext_dict">ext.dic;</entry>
+2：新建ext.dic文件，在里面添加如下内容(注意：ext.dic的编码必须是Encode in UTF-8 without BOM,否则自定义的词库不会被识别)
+     超人学院
+3：重启solr
+4：在solr web界面进行如下操作，看到图中操作结果即为配置成功。
+
+
+ 
+
+
+
+导入数据库数据： 
+1.solrconfig.xml 配置 
+使用DataImportHandler导入并索引数据
+<!-- 
+    添加数据库导入功能
+  --><requestHandler name="/dataimport"class="org.apache.solr.handler.dataimport.DataImportHandler"><lstname="defaults"><strname="config">E:\solrhome\collection1\conf\db\db-data-config.xml</str></lst></requestHandler>
+费元星版本
+<!--  feiyuanxing  -->
+<requestHandler name="/detaimport"class="org.apache.solr.handler.dataimport.DataImportHandler">
+        <lst name="defaults"><str name="config">/usr/local/solrhome/collection1/conf/db/db-data-config.xml</str></lst>
+</requestHandler>
+
+2.导入jar和数据库驱动包，放到webapps/solr/WEB-INF/lib 
+solr-dataimporthandler-4.10.4.jar 
+solr-dataimporthandler-extras-4.10.4.jar 
+数据库驱动包
+3.E:\solrhome\collection1\conf 下创建db文件夹，创建文件：db-data-config.xml
+<dataConfig><dataSourcetype="JdbcDataSource"driver="com.mysql.jdbc.Driver"url="jdbc:mysql://127.0.0.1/goods"user="root"password="root"/><documentname="goods"><entityname="book"transformer="ClobTransformer"pk="bid"query="select bid,bname,author,price,currprice,discount,press,publishtime,edition,pagenum,wordnum,printtime,booksize,paper from t_book"><fieldcolumn="bid"name="id" /> 必须为id
+             <fieldcolumn="bname"name="bname"/><fieldcolumn="author"name="bauthor"/><fieldcolumn="price"name="bprice"/><fieldcolumn="currprice"name="bcurrprice"/><fieldcolumn="discount"name="bdiscount"/><fieldcolumn="press"name="bpress"/><fieldcolumn="publishtime"name="bpublishtime"/><fieldcolumn="edition"name="bedition"/><fieldcolumn="pagenum"name="bpagenum"/></entity></document></dataConfig><!--
+说明：
+dataSource是数据库数据源。
+Entity就是一张表对应的实体，pk是主键，query是查询语句。
+Field对应一个字段，column是数据库里的column名，
+后面的name属性对应着Solr的Filed的名字。
+-->
+  ● 1
+  ● 31
+4 修改schema.xml，这是Solr对数据库里的数据进行索引的模式 
+（1）保留version 这个field 
+（2）添加索引字段：这里每个field的name要和db-data-config.xml里的entity的field的name一样，一一对应。
+<fieldname="_version_"type="long"indexed="true"stored="true"/><!--
+
+        数据库字段配置：    
+    --><fieldname="id"type="string"indexed="true"stored="true"required="true"multiValued="false" /><fieldname="bname"type="text_ik"indexed="true"stored="true"multiValued="true"/><fieldname="bauthor"type="text_ik"indexed="true"stored="true"multiValued="true"/><fieldname="bprice"type="text_ik"indexed="true"stored="true"multiValued="true"/><fieldname="bcurrprice"type="text_ik"indexed="true"stored="true"multiValued="true"/><fieldname="bdiscount"type="text_ik"indexed="true"stored="true"multiValued="true"/><fieldname="bpress"type="text_ik"indexed="true"stored="true"multiValued="true"/><fieldname="bpublishtime"type="text_ik"indexed="true"stored="true"multiValued="true"/><fieldname="bedition"type="text_ik"indexed="true"stored="true"multiValued="true"/><fieldname="bpagenum"type="text_ik"indexed="true"stored="true"multiValued="true"/><uniqueKey>id</uniqueKey>
+  ● 1
+  ● 2
+  ● 3
+  ● 4
+  ● 5
+  ● 6
+  ● 7
+  ● 8
+  ● 9
+  ● 10
+  ● 11
+  ● 12
+  ● 13
+  ● 14
+  ● 15
+  ● 16
+  ● 17
+  ● 18
+  ● 19
+5 删除多余的field，删除copyField里的设置，注意：text这个field不能删除，否则Solr启动失败。
+   <field name="text"type="text_general" indexed="true" stored="false" multiValued="true"/>
+  ● 1
+6 设置唯一主键：id，注意：Solr中索引的主键默认 
+是只支持type=”string”字符串类型的，而如果数据库中id是int型的，会有问题，解决方法：修改同目录下的elevate.xml，注释掉下面2行，这貌似是Solr的Bug，原因不明。
+<docid="MA147LL/A" /><docid="IW-02"exclude="true" />
+  ● 1
+  ● 2
+7 重启Solr，如果配置正确就可以启动成功。
+solrconfig.xml是solr的基础文件，里面配置了各种web请求处理器、请求响应处理器、日志、缓存等。
+
+schema.xml配置映射了各种数据类型的索引方案。分词器的配置、索引文档中包含的字段也在此配置。
+  ● 1
+  ● 2
+  ● 3
+8.点击Dataimport，Command选择full-import（默认），点击“Execute”，Refresh Status就可以看到结果
+
+
+
+
+
+<field name="id" type="string" indexed="true" stored="true" required="true" multiValued="false" />
+<field name="f_id" type="text_ik" indexed="true" stored="true" multiValued="true"/>
+<field name="entname" type="text_ik" indexed="true" stored="true" multiValued="true"/>
+<field name="cred_code" type="text_ik" indexed="true" stored="true" multiValued="true"/>
+<field name="reg_code" type="text_ik" indexed="true" stored="true" multiValued="true"/>
+<field name="org_code" type="text_ik" indexed="true" stored="true" multiValued="true"/>
+<field name="tax_code" type="text_ik" indexed="true" stored="true" multiValued="true"/>
+<field name="status" type="text_ik" indexed="true" stored="true" multiValued="true"/>
+<uniqueKey>id</uniqueKey>
+
+
+
+<dataConfig>
+        <dataSourcetype="JdbcDataSource"driver="com.mysql.jdbc.Driver"url="jdbc:mysql://202.74.234.100/background"user="root"password="MYSQL522"/>
+        <documentname="goods"><entityname="creditcode"transformer="ClobTransformer"pk="bid"query="select id,f_id,entname,cred_code,reg_code,org_code,tax_code,status from creditcode">
+                <fieldcolumn="bid"name="id" />
+                <fieldcolumn="f_id"name="f_id"/>
+                <fieldcolumn="entname"name="entname"/>
+                <fieldcolumn="cred_code"name="cred_code"/>
+                <fieldcolumn="reg_code"name="reg_code"/>
+                <fieldcolumn="org_code"name="org_code"/>
+                <fieldcolumn="tax_code"name="tax_code"/>
+                <fieldcolumn="status"name="status"/>
+                </entity>
+        </document>
+</dataConfig>
+<!--
+说明：
+dataSource是数据库数据源。
+Entity就是一张表对应的实体，pk是主键，query是查询语句。
+Field对应一个字段，column是数据库里的column名，
+后面的name属性对应着Solr的Filed的名字。
+-->
+
+
+
